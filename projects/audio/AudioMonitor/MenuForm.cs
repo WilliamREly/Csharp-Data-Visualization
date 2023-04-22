@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using FTD2XX_NET;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace AudioMonitor
@@ -22,23 +23,28 @@ namespace AudioMonitor
             .EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active)
             .ToArray();
 
+        private List<FTDI.FT_DEVICE_INFO_NODE> _ftdiPorts;
+        private BindingList<string> _ftdiPortsSerialNumbers;
         public MenuForm()
         {
             InitializeComponent();
-
-            foreach (MMDevice device in AudioDevices)
+            
+            _ftdiPorts = new List<FTDI.FT_DEVICE_INFO_NODE>();
+            _ftdiPortsSerialNumbers = new BindingList<string>();
+            System.Diagnostics.Debug.WriteLine(FtdiSerialPortDriver.GetPortList());
+            FtdiSerialPortDriver.GetPortList();
+            _ftdiPorts = FtdiSerialPortDriver.DeviceList;
+            foreach (var ftdiPort in _ftdiPorts)
             {
-                string deviceType = device.DataFlow == DataFlow.Capture ? "INPUT" : "OUTPUT";
-                string deviceLabel = $"{deviceType}: {device.FriendlyName}";
-                lbDevice.Items.Add(deviceLabel);
+                _ftdiPortsSerialNumbers.Add(ftdiPort.ID.ToString());
+                lbDevice.Items.Add(ftdiPort.SerialNumber);
             }
-
             lbDevice.SelectedIndex = 0;
         }
 
         private WasapiCapture GetSelectedDevice()
         {
-            MMDevice selectedDevice = AudioDevices[lbDevice.SelectedIndex];
+            var selectedDevice = AudioDevices[lbDevice.SelectedIndex];
             return selectedDevice.DataFlow == DataFlow.Render
                 ? new WasapiLoopbackCapture(selectedDevice)
                 : new WasapiCapture(selectedDevice, true, 10);
@@ -46,14 +52,13 @@ namespace AudioMonitor
 
         private void button1_Click(object sender, EventArgs e)
         {
-            WasapiCapture captureDevice = GetSelectedDevice();
-            new AudioMonitorForm(captureDevice).ShowDialog();
+           
+            
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            WasapiCapture captureDevice = GetSelectedDevice();
-            new FftMonitorForm(captureDevice).ShowDialog();
+            new AccelerometerForm(416, lbDevice.SelectedIndex).ShowDialog();
         }
     }
 }

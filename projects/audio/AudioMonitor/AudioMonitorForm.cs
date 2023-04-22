@@ -13,7 +13,7 @@ public partial class AudioMonitorForm : Form
     {
         InitializeComponent();
         AudioDevice = captureDevice;
-        WaveFormat fmt = captureDevice.WaveFormat;
+        var fmt = captureDevice.WaveFormat;
 
         AudioValues = new double[fmt.SampleRate * 10 / 1000]; // 10 milliseconds
 
@@ -42,9 +42,9 @@ public partial class AudioMonitorForm : Form
 
     private void WaveIn_DataAvailable(object? sender, WaveInEventArgs e)
     {
-        int bytesPerSamplePerChannel = AudioDevice.WaveFormat.BitsPerSample / 8;
-        int bytesPerSample = bytesPerSamplePerChannel * AudioDevice.WaveFormat.Channels;
-        int bufferSampleCount = e.Buffer.Length / bytesPerSample;
+        var bytesPerSamplePerChannel = AudioDevice.WaveFormat.BitsPerSample / 8;
+        var bytesPerSample = bytesPerSamplePerChannel * AudioDevice.WaveFormat.Channels;
+        var bufferSampleCount = e.Buffer.Length / bytesPerSample;
 
         if (bufferSampleCount >= AudioValues.Length)
         {
@@ -53,17 +53,17 @@ public partial class AudioMonitorForm : Form
 
         if (bytesPerSamplePerChannel == 2 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.Pcm)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToInt16(e.Buffer, i * bytesPerSample);
         }
         else if (bytesPerSamplePerChannel == 4 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.Pcm)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToInt32(e.Buffer, i * bytesPerSample);
         }
         else if (bytesPerSamplePerChannel == 4 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToSingle(e.Buffer, i * bytesPerSample);
         }
         else

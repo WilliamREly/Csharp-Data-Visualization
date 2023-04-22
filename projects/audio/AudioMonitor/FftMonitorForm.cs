@@ -14,13 +14,13 @@ public partial class FftMonitorForm : Form
     {
         InitializeComponent();
         AudioDevice = audioDevice;
-        WaveFormat fmt = audioDevice.WaveFormat;
+        var fmt = audioDevice.WaveFormat;
 
         AudioValues = new double[fmt.SampleRate / 10];
-        double[] paddedAudio = FftSharp.Pad.ZeroPad(AudioValues);
-        double[] fftMag = FftSharp.Transform.FFTpower(paddedAudio);
+        var paddedAudio = FftSharp.Pad.ZeroPad(AudioValues);
+        var fftMag = FftSharp.Transform.FFTpower(paddedAudio);
         FftValues = new double[fftMag.Length];
-        double fftPeriod = FftSharp.Transform.FFTfreqPeriod(fmt.SampleRate, fftMag.Length);
+        var fftPeriod = FftSharp.Transform.FFTfreqPeriod(fmt.SampleRate, fftMag.Length);
 
         formsPlot1.Plot.AddSignal(FftValues, 1.0 / fftPeriod);
         formsPlot1.Plot.YLabel("Spectral Power");
@@ -44,9 +44,9 @@ public partial class FftMonitorForm : Form
 
     private void WaveIn_DataAvailable(object? sender, WaveInEventArgs e)
     {
-        int bytesPerSamplePerChannel = AudioDevice.WaveFormat.BitsPerSample / 8;
-        int bytesPerSample = bytesPerSamplePerChannel * AudioDevice.WaveFormat.Channels;
-        int bufferSampleCount = e.Buffer.Length / bytesPerSample;
+        var bytesPerSamplePerChannel = AudioDevice.WaveFormat.BitsPerSample / 8;
+        var bytesPerSample = bytesPerSamplePerChannel * AudioDevice.WaveFormat.Channels;
+        var bufferSampleCount = e.Buffer.Length / bytesPerSample;
 
         if (bufferSampleCount >= AudioValues.Length)
         {
@@ -55,17 +55,17 @@ public partial class FftMonitorForm : Form
 
         if (bytesPerSamplePerChannel == 2 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.Pcm)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToInt16(e.Buffer, i * bytesPerSample);
         }
         else if (bytesPerSamplePerChannel == 4 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.Pcm)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToInt32(e.Buffer, i * bytesPerSample);
         }
         else if (bytesPerSamplePerChannel == 4 && AudioDevice.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
         {
-            for (int i = 0; i < bufferSampleCount; i++)
+            for (var i = 0; i < bufferSampleCount; i++)
                 AudioValues[i] = BitConverter.ToSingle(e.Buffer, i * bytesPerSample);
         }
         else
@@ -76,19 +76,19 @@ public partial class FftMonitorForm : Form
 
     private void timer1_Tick(object sender, EventArgs e)
     {
-        double[] paddedAudio = FftSharp.Pad.ZeroPad(AudioValues);
-        double[] fftMag = FftSharp.Transform.FFTmagnitude(paddedAudio);
+        var paddedAudio = FftSharp.Pad.ZeroPad(AudioValues);
+        var fftMag = FftSharp.Transform.FFTmagnitude(paddedAudio);
         Array.Copy(fftMag, FftValues, fftMag.Length);
 
         // find the frequency peak
-        int peakIndex = 0;
-        for (int i = 0; i < fftMag.Length; i++)
+        var peakIndex = 0;
+        for (var i = 0; i < fftMag.Length; i++)
         {
             if (fftMag[i] > fftMag[peakIndex])
                 peakIndex = i;
         }
-        double fftPeriod = FftSharp.Transform.FFTfreqPeriod(AudioDevice.WaveFormat.SampleRate, fftMag.Length);
-        double peakFrequency = fftPeriod * peakIndex;
+        var fftPeriod = FftSharp.Transform.FFTfreqPeriod(AudioDevice.WaveFormat.SampleRate, fftMag.Length);
+        var peakFrequency = fftPeriod * peakIndex;
         label1.Text = $"Peak Frequency: {peakFrequency:N0} Hz";
 
         // request a redraw using a non-blocking render queue
