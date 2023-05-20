@@ -13,6 +13,7 @@ public partial class AccelerometerForm : Form
     private FtdiSerialPortDriver _ftdiPort;
     private ConcurrentBag<Iis2IclxRecord> _iis2IclxLogList;
     private ConcurrentBag<Iis2IclxRecord> _accelLogList;
+    private ConcurrentBag<string> _fftStrings;
     private static int _accEntryCount;
     private static uint _prevAccCount;
 
@@ -26,7 +27,7 @@ public partial class AccelerometerForm : Form
         InitializeComponent();
         _buffer = new byte[21];
         _sampleRate = sampleRate;
-        var paddedAudio = FftSharp.Pad.ZeroPad(new double[sampleRate]);
+        var paddedAudio = FftSharp.Pad.ZeroPad(new double[sampleRate*2]);
         var fftMag = FftSharp.Transform.FFTpower(paddedAudio);
         _samplesNeeded = paddedAudio.Length;
         _fftValuesX = new double[fftMag.Length];
@@ -36,18 +37,19 @@ public partial class AccelerometerForm : Form
         formsPlotX.Plot.YLabel("Spectral Power");
         formsPlotX.Plot.XLabel("Frequency (Hz)");
         formsPlotX.Plot.Title($"X-Axis {sampleRate} Hz");
-        formsPlotX.Plot.SetAxisLimits(0, sampleRate / 2, 0, 2000);
+        formsPlotX.Plot.SetAxisLimits(0, 50, 0, 2000);
         formsPlotX.Refresh();
         formsPlotY.Plot.AddSignal(_fftValuesY, 1.0 / fftPeriod);
         formsPlotY.Plot.YLabel("Spectral Power");
         formsPlotY.Plot.XLabel("Frequency (Hz)");
         formsPlotY.Plot.Title($"Y-Axis {sampleRate} Hz");
-        formsPlotY.Plot.SetAxisLimits(0, sampleRate / 2, 0, 2000);
+        formsPlotY.Plot.SetAxisLimits(0, 50, 0, 2000);
         formsPlotY.Refresh();
 
         _ftdiPort = new FtdiSerialPortDriver((uint) (ftdiIndex), 115200);
         _iis2IclxLogList = new ConcurrentBag<Iis2IclxRecord>(); // this is for the fft
         _accelLogList = new ConcurrentBag<Iis2IclxRecord>(); // this is for logging to files
+        _fftStrings = new ConcurrentBag<string>();
         _ftdiPort.DataReceived += Sp_DataReceived;
         FormClosed += AccelerometerForm_FormClosed;
         _portName = _ftdiPort.PortName;
@@ -64,6 +66,7 @@ public partial class AccelerometerForm : Form
         {
             if (uartLog.RecordType != 0) continue;
             var record =
+                uartLog.RxTimeStamp.ToOADate().ToString() + "," +
                 uartLog.SequenceNum + "," +
                 uartLog.AccelX + "," + uartLog.AccelY + "," + uartLog.SampleRate + "," + uartLog.Scale;
             sb.AppendLine(record);
@@ -75,7 +78,25 @@ public partial class AccelerometerForm : Form
             bufferSize: 4096, useAsync: true);
         await sourceStream.WriteAsync(encodedText);
     }
+    private static async Task SaveFft(List<string> fftStrings, string filePath)
+    {
+        
 
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+        var sb = new StringBuilder();
+        foreach (var fftString in fftStrings)
+        {
+            sb.AppendLine(fftString);
+        }
+        
+
+        var encodedText = Encoding.ASCII.GetBytes(sb.ToString());
+        await using var sourceStream = new FileStream(filePath + ".csv",
+            FileMode.Create, FileAccess.Write, FileShare.None,
+            bufferSize: 4096, useAsync: true);
+        await sourceStream.WriteAsync(encodedText);
+    }
     private void Sp_DataReceived(object? sender, FtdiSerialPortDriver.DataReceivedArgs e)
     {
 
@@ -147,7 +168,8 @@ public partial class AccelerometerForm : Form
                                 AccelX = x,
                                 AccelY = y,
                                 SampleRate = sampleRate,
-                                Scale = scale
+                                Scale = scale,
+                                RxTimeStamp = DateTime.Now
                             };
                             _iis2IclxLogList.Add(iis2IclxRecord);
                             _accelLogList.Add(iis2IclxRecord);
@@ -162,17 +184,18 @@ public partial class AccelerometerForm : Form
 
                             _prevAccCount = count;
                             _accEntryCount++;
-                            if (_accEntryCount % (12000) == 0)
+                            
+                            if (_accEntryCount % (_sampleRate * 120) == 0)
                             {
                                 System.Diagnostics.Debug.WriteLine("Recevied " + _accEntryCount + " packets");
-                            }
-
-                            if (_accEntryCount % (_sampleRate * 60) == 0)
-                            {
                                 var outFileName = AppContext.BaseDirectory + _portName + "-" + DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
+                                var outFftFileName = AppContext.BaseDirectory + _portName + "-fft-" + DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
                                 var tempAccList = _accelLogList.ToList();
                                 _accelLogList.Clear();
+                                var tempFftList = _fftStrings.ToList();
+                                _fftStrings.Clear();
                                 Task.Run(() => SaveLogs(tempAccList, outFileName));
+                                Task.Run(() => SaveFft(tempFftList, outFftFileName));
                             }
                         }
                         else
@@ -199,7 +222,7 @@ public partial class AccelerometerForm : Form
         Array.Copy(fftMag, fftValues, fftMag.Length);
         // find the frequency peak
         var peakIndexX = 0;
-        for (var i = 0; i < fftMag.Length; i++)
+        for (var i = 1; i < fftMag.Length; i++)
         {
             if (fftMag[i] > fftMag[peakIndexX])
                 peakIndexX = i;
@@ -214,10 +237,14 @@ public partial class AccelerometerForm : Form
     {
         if (null == _iis2IclxLogList || _iis2IclxLogList.Count < _samplesNeeded)
             return;
-
+        var fftLog = new FftLog();
+        fftLog.X = new double[_samplesNeeded];
+        fftLog.Y = new double[_samplesNeeded];
+        
         var accelerationY = new double[_samplesNeeded];
         var accelerationX = new double[_samplesNeeded];
         var sampleRate = _iis2IclxLogList.First().SampleRate;
+        var sampleStartNum = _iis2IclxLogList.First().SequenceNum;
         for (var ix = 0; ix < _samplesNeeded; ix++)
         {
             if (!_iis2IclxLogList.TryTake(out var item)) continue;
@@ -227,6 +254,25 @@ public partial class AccelerometerForm : Form
 
         labelPeakX.Text = GetFft(accelerationX, ref _fftValuesX, (int) sampleRate);
         labelPeakY.Text = GetFft(accelerationY, ref _fftValuesY, (int) sampleRate);
+        
+        
+        var sb = new StringBuilder();
+        
+        sb.Append(sampleStartNum + ",x,");
+        foreach (var d in _fftValuesX)
+        {
+            sb.Append(d + ",");
+        }
+
+        sb.Append("\r\n" + sampleStartNum + ",y,");
+        foreach (var d in _fftValuesY)
+        {
+            sb.Append(d + ",");
+        }
+        
+        _fftStrings.Add(sb.ToString());
+       
+        
 
         // request a redraw using a non-blocking render queue
         formsPlotX.RefreshRequest();
@@ -236,10 +282,10 @@ public partial class AccelerometerForm : Form
     private void AccelerometerForm_FormClosed(object? sender, FormClosedEventArgs e)
     {
         _ftdiPort.Close();
-        var outFileName = AppContext.BaseDirectory + _portName + "-" + DateTime.Now.ToString("yyyy-MM-dd-HHmmss") + ".csv";
+        var outFileName = AppContext.BaseDirectory + _portName + "-" + DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
         var tempAccList = _accelLogList.ToList();
-        _accelLogList.Clear();
         Task.Run(() => SaveLogs(tempAccList, outFileName));
+        _accelLogList.Clear();
     }
 
     private void labelPeakY_Click(object sender, EventArgs e)

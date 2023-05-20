@@ -6,6 +6,7 @@ namespace AudioMonitor
     {
         public int RecordType { get; set; }
         public System.DateTime TimeStamp { get; set; }
+        public System.DateTime RxTimeStamp { get; set; }
         public int SequenceNum { get; set; }
         public float AccelX { get; set; }
         public float AccelY { get; set; }
